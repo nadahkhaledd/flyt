@@ -5,8 +5,7 @@ SAMPLES = samples-bin/matrixMul.compressed.sample \
 		  samples-bin/matrixMul.uncompressed.sample \
 		  samples-bin/nbody.uncompressed.sample \
 		  samples-bin/nbody.compressed.sample \
-		  samples-bin/bandwidthTest.sample \
-		  samples-bin/mnistCUDNN.sample
+		  samples-bin/bandwidthTest.sample
 
 CUDA_PATH = /usr/local/cuda
 SMS = 75 60
