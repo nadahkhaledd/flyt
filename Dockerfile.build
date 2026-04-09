@@ -1,0 +1,23 @@
+FROM nvidia/cuda:12.6.3-devel-ubuntu24.04
+
+RUN apt-get update && apt-get install -y build-essential git autoconf automake libtool m4 pkg-config rpcbind libssl-dev libelf-dev dos2unix rpm curl wget freeglut3-dev libglu1-mesa-dev libgl1-mesa-dev libfreeimage-dev libvdpau-dev libtirpc-dev && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y libcudnn9-dev-cuda-12 || echo "trying alternate repo" && echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /" > /etc/apt/sources.list.d/cuda-extra.list && apt-get update && apt-get install -y libcudnn9-dev-cuda-12 || echo "WARNING: cuDNN failed"
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+COPY . .
+
+RUN cd submodules/libtirpc && if [ -d $'m4\r' ]; then mv $'m4\r' m4; fi && cd ../..
+
+RUN find . -path ./.git -prune -o -type f \( -name "*.c" -o -name "*.h" -o -name "*.rs" -o -name "Makefile" -o -name "*.sh" -o -name "*.toml" -o -name "*.x" -o -name "*.am" -o -name "*.ac" -o -name "*.in" \) -print -exec dos2unix {} \; > /dev/null 2>&1
+
+RUN rm -rf submodules/libtirpc/install submodules/libtirpc/configure
+
+RUN make cpu install-cpu install-cmgr LOG=INFO
+
+RUN make -C tests/test_apps LOG=INFO || true
+
+CMD ["ls", "-la", "/build/bin/"]
