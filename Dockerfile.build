@@ -1,7 +1,5 @@
-# Use CUDA 12.0 devel to match hamta's host CUDA 12.0.146
 FROM nvidia/cuda:12.0.1-devel-ubuntu22.04
 
-# Install build dependencies (Ubuntu 22.04 package names)
 RUN apt-get update && apt-get install -y \
     build-essential git autoconf automake libtool m4 pkg-config \
     rpcbind libssl-dev libelf-dev dos2unix rpm curl wget \
@@ -9,46 +7,46 @@ RUN apt-get update && apt-get install -y \
     libvdpau-dev libtirpc-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install cuDNN 8 for CUDA 12.0
 RUN apt-get update && apt-get install -y libcudnn8-dev \
     || echo "WARNING: cuDNN install failed, trying alternate" \
     && apt-get install -y libcudnn8 libcudnn8-dev \
     || echo "WARNING: cuDNN not available"
 
-# Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /build
 COPY . .
 
-# Fix CRLF issues
 RUN cd submodules/libtirpc && if [ -d $'m4\r' ]; then mv $'m4\r' m4; fi && cd ../..
 RUN find . -path ./.git -prune -o -type f \( -name "*.c" -o -name "*.h" -o -name "*.rs" -o -name "Makefile" -o -name "*.sh" -o -name "*.toml" -o -name "*.x" -o -name "*.am" -o -name "*.ac" -o -name "*.in" \) -print -exec dos2unix {} \; > /dev/null 2>&1
-
-# Force clean libtirpc rebuild
 RUN rm -rf submodules/libtirpc/install submodules/libtirpc/configure
-
-# Fix config paths for hamta
 RUN sed -i 's|/home/nada/|/home/khab/|g' control-managers/src/common/config.rs
 
-# Guard CUDA 12.3+ driver API types that don't exist in CUDA 12.0
-# CUgraphEdgeData, CUgraphNodeParams, CUgraphConditionalHandle were added in CUDA 12.3
-RUN sed -i '/cuStreamBeginCaptureToGraph/i #if CUDA_VERSION >= 12030 /* Graph APIs added in CUDA 12.3 */' cpu/cpu-client-driver.c && \
+# Guard CUDA 12.3+ driver API types
+RUN sed -i '/cuStreamBeginCaptureToGraph/i #if CUDA_VERSION >= 12030' cpu/cpu-client-driver.c && \
     sed -i '/cuGraphConditionalHandleCreate/{n;s/^/#endif \/\* CUDA_VERSION >= 12030 *\/\n/;}' cpu/cpu-client-driver.c
 
-# Also apply the same patch to the server-side driver file if it has the same types
 RUN sed -i '/cuStreamBeginCaptureToGraph/i #if CUDA_VERSION >= 12030' cpu/cpu-server-driver.c 2>/dev/null; \
     sed -i '/cuGraphConditionalHandleCreate/{n;s/^/#endif \/\* CUDA_VERSION >= 12030 *\/\n/;}' cpu/cpu-server-driver.c 2>/dev/null; \
     echo "Driver patches applied"
 
-# Apply CRICKET_SERVER env var bypass patch to cpu-client.c
-RUN sed -i '/char\* server_info = init_client_mgr();/c\    /* Allow direct server connection via env var, bypassing client-manager */\n    char* server_info = NULL;\n    char* env_server = getenv("CRICKET_SERVER");\n    if (env_server != NULL) {\n        server_info = strdup(env_server);\n        fprintf(stderr, "[cricket-client] Using CRICKET_SERVER=%s\\n", server_info);\n    } else {\n        server_info = init_client_mgr();\n    }' cpu/cpu-client.c
+# CRICKET_SERVER bypass patch
+RUN sed -i '/char\* server_info = init_client_mgr();/c\    char* server_info = NULL;\n    char* env_server = getenv("CRICKET_SERVER");\n    if (env_server != NULL) {\n        server_info = strdup(env_server);\n        fprintf(stderr, "[cricket-client] Using CRICKET_SERVER=%s\\n", server_info);\n    } else {\n        server_info = init_client_mgr();\n    }' cpu/cpu-client.c
 
-# Build core Flyt components
+# DEBUG: Add progress prints between each init step in cricket_main()
+RUN sed -i 's|set_active_device(gpu_id);|fprintf(stderr, "[INIT] step 1: set_active_device...\\n"); fflush(stderr);\n    set_active_device(gpu_id);\n    fprintf(stderr, "[INIT] step 1: DONE\\n"); fflush(stderr);|' cpu/cpu-server.c && \
+    sed -i 's|if (sched->init()|fprintf(stderr, "[INIT] step 2: sched->init...\\n"); fflush(stderr);\n    if (sched->init()|' cpu/cpu-server.c && \
+    sed -i 's|if (server_runtime_init(|fprintf(stderr, "[INIT] step 3: server_runtime_init...\\n"); fflush(stderr);\n    if (server_runtime_init(|' cpu/cpu-server.c && \
+    sed -i 's|if (server_driver_init(|fprintf(stderr, "[INIT] step 4: server_driver_init...\\n"); fflush(stderr);\n    if (server_driver_init(|' cpu/cpu-server.c && \
+    sed -i 's|if (server_nvml_init(|fprintf(stderr, "[INIT] step 5: server_nvml_init...\\n"); fflush(stderr);\n    if (server_nvml_init(|' cpu/cpu-server.c && \
+    sed -i 's|if (server_cudnn_init(|fprintf(stderr, "[INIT] step 6: server_cudnn_init...\\n"); fflush(stderr);\n    if (server_cudnn_init(|' cpu/cpu-server.c && \
+    sed -i 's|init_listener(vers);|fprintf(stderr, "[INIT] step 7: init_listener...\\n"); fflush(stderr);\n    init_listener(vers);\n    fprintf(stderr, "[INIT] step 7: DONE\\n"); fflush(stderr);|' cpu/cpu-server.c && \
+    sed -i 's|if (init_resource_controller(|fprintf(stderr, "[INIT] step 8: init_resource_controller...\\n"); fflush(stderr);\n    if (init_resource_controller(|' cpu/cpu-server.c && \
+    sed -i 's|if (init_cpu_server_client_mgr()|fprintf(stderr, "[INIT] step 9: init_cpu_server_client_mgr...\\n"); fflush(stderr);\n    if (init_cpu_server_client_mgr()|' cpu/cpu-server.c && \
+    echo "Debug prints added"
+
 RUN make cpu install-cpu install-cmgr LOG=INFO
-
-# Build test apps (ok if some fail)
 RUN make -C tests/test_apps LOG=INFO || true
 
 CMD ["ls", "-la", "/build/bin/"]
