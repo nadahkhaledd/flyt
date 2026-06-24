@@ -161,13 +161,13 @@ int remove_client_by_pid(int pid);
     }
 
 #define GET_MEMORY(mem_ptr, client_addr, result) \
-    if (!resource_map_contains(client->gpu_mem, (void*)client_addr)) { \
+    mem_ptr = resource_map_get_addr(client->gpu_mem, (void*)client_addr); \
+    if (mem_ptr == NULL) { \
         LOGE(LOG_ERROR, "memory not found in gpu_mem"); \
         result = cudaErrorInvalidValue; \
         GSCHED_RELEASE; \
         return 1; \
-    } \
-    mem_ptr = resource_map_get_addr(client->gpu_mem, (void*)client_addr);
+    }
 
 #define GET_VARIABLE(var_ptr, client_addr, result) \
     if ((var_ptr = resource_mg_get_or_null(&client->vars, (void *)client_addr)) == NULL) { \

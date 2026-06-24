@@ -1032,6 +1032,7 @@ DEF_FN(CUresult, cuDeviceGetGraphMemAttribute, CUdevice, device, CUgraphMem_attr
 DEF_FN(CUresult, cuDeviceSetGraphMemAttribute, CUdevice, device, CUgraphMem_attribute, attr, void*, value)
 DEF_FN(CUresult, cuGraphInstantiateWithFlags, CUgraphExec*, phGraphExec, CUgraph, hGraph, unsigned long long, flags)
 DEF_FN(CUresult, cuGraphUpload, CUgraphExec, hGraphExec, CUstream, hStream)
+#if CUDA_VERSION >= 12030
 DEF_FN(CUresult, cuStreamBeginCaptureToGraph, CUstream, hStream, CUgraph, hGraph, const CUgraphNode*, dependencies, const CUgraphEdgeData*, dependencyData, size_t, numDependencies, CUstreamCaptureMode, mode)
 DEF_FN(CUresult, cuStreamGetCaptureInfo, CUstream, hStream, CUstreamCaptureStatus*, captureStatus_out, cuuint64_t*, id_out, CUgraph*, graph_out, const CUgraphNode**, dependencies_out, size_t*, numDependencies_out)
 DEF_FN(CUresult, cuStreamUpdateCaptureDependencies, CUstream, hStream, CUgraphNode*, dependencies, size_t, numDependencies, unsigned int, flags)
@@ -1061,4 +1062,5 @@ DEF_FN(CUresult, cuGraphAddNode, CUgraphNode*, phGraphNode, CUgraph, hGraph, con
 DEF_FN(CUresult, cuGraphNodeSetParams, CUgraphNode, hNode, CUgraphNodeParams*, nodeParams)
 DEF_FN(CUresult, cuGraphExecNodeSetParams, CUgraphExec, hGraphExec, CUgraphNode, hNode, CUgraphNodeParams*, nodeParams)
 DEF_FN(CUresult, cuGraphConditionalHandleCreate, CUgraphConditionalHandle*, pHandle_out, CUgraph, hGraph, CUcontext, ctx, unsigned int, defaultLaunchValue, unsigned int, flags)
+#endif /* CUDA_VERSION >= 12030 */
 DEF_FN(CUresult, cuFuncGetName, const char**, name, CUfunction, hfunc)
